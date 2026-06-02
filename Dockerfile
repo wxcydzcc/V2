@@ -1,18 +1,24 @@
-FROM nginx:latest
+FROM nginx:stable-bookworm
+
 EXPOSE 80
 WORKDIR /app
 USER root
 
+ARG V2RAY_VERSION=v5.49.0
+
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY entrypoint.sh ./
 
-RUN apt-get update && apt-get install -y wget unzip iproute2 systemctl &&\
-    wget -O temp.zip $(wget -qO- "https://api.github.com/repos/v2fly/v2ray-core/releases/latest" | grep -m1 -o "https.*linux-64.*zip") &&\
-    unzip temp.zip v2ray geoip.dat geosite.dat &&\
-    mv v2ray v &&\
-    rm -f temp.zip &&\
-    chmod -v 755 v entrypoint.sh &&\
-    echo 'ewogICAgImxvZyI6ewogICAgICAgICJsb2dsZXZlbCI6Indhcm5pbmciLAogICAgICAgICJhY2Nl\
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends wget unzip ca-certificates iproute2 \
+    && wget -O temp.zip "https://github.com/v2fly/v2ray-core/releases/download/${V2RAY_VERSION}/v2ray-linux-64.zip" \
+    && unzip temp.zip v2ray geoip.dat geosite.dat \
+    && mv v2ray v \
+    && rm -f temp.zip \
+    && chmod 755 v entrypoint.sh \
+    && apt-get purge -y --auto-remove wget unzip \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo 'ewogICAgImxvZyI6ewogICAgICAgICJsb2dsZXZlbCI6Indhcm5pbmciLAogICAgICAgICJhY2Nl\
 c3MiOiIvZGV2L251bGwiLAogICAgICAgICJlcnJvciI6Ii9kZXYvbnVsbCIKICAgIH0sCiAgICAi\
 aW5ib3VuZHMiOlsKICAgICAgICB7CiAgICAgICAgICAgICJwb3J0IjoxMDAwMCwKICAgICAgICAg\
 ICAgInByb3RvY29sIjoidm1lc3MiLAogICAgICAgICAgICAibGlzdGVuIjoiMTI3LjAuMC4xIiwK\

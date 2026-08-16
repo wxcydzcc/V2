@@ -1,23 +1,75 @@
 #!/usr/bin/env bash
+set -Eeuo pipefail
 
-# 定义 UUID 及 伪装路径,请自行修改.(注意:伪装路径以 / 符号开始,为避免不必要的麻烦,请不要使用特殊符号.)
-base64 -d config > config.json
-UUID=${UUID:-'185bb43c-25fa-45c5-9998-f99ffd2f4a76'}
-VMESS_WSPATH=${VMESS_WSPATH:-'/vmess'}
-VLESS_WSPATH=${VLESS_WSPATH:-'/vless'}
-sed -i "s#UUID#$UUID#g;s#VMESS_WSPATH#${VMESS_WSPATH}#g;s#VLESS_WSPATH#${VLESS_WSPATH}#g" config.json
-sed -i "s#VMESS_WSPATH#${VMESS_WSPATH}#g;s#VLESS_WSPATH#${VLESS_WSPATH}#g" /etc/nginx/nginx.conf
+readonly CONFIG_TEMPLATE="/app/config.template.json"
+readonly CONFIG_FILE="/tmp/config.json"
+readonly NGINX_TEMPLATE="/app/nginx.conf"
+readonly NGINX_CONFIG="/tmp/nginx.conf"
 
-# 伪装 v2ray 执行文件
-RELEASE_RANDOMNESS=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 6)
-mv v ${RELEASE_RANDOMNESS}
-cat config.json | base64 > config
-rm -f config.json
+: "${UUID:?UUID is required. Configure it as a Koyeb secret-backed environment variable.}"
 
-# 如果有设置哪吒探针三个变量,会安装。如果不填或者不全,则不会安装
-[ -n "${NEZHA_SERVER}" ] && [ -n "${NEZHA_PORT}" ] && [ -n "${NEZHA_KEY}" ] && wget https://raw.githubusercontent.com/naiba/nezha/master/script/install.sh -O nezha.sh && chmod +x nezha.sh && echo '0' | ./nezha.sh install_agent ${NEZHA_SERVER} ${NEZHA_PORT} ${NEZHA_KEY}
+VMESS_WSPATH="${VMESS_WSPATH:-/vmess}"
+VLESS_WSPATH="${VLESS_WSPATH:-/vless}"
 
-# 运行 nginx 和 v2ray
-nginx
-base64 -d config > config.json
-./${RELEASE_RANDOMNESS} run
+if [[ ! "${UUID}" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ ]]; then
+    echo "UUID must be a valid RFC 9562 UUID." >&2
+    exit 64
+fi
+
+validate_ws_path() {
+    local name="$1"
+    local value="$2"
+
+    if [[ ! "${value}" =~ ^/[A-Za-z0-9._~/-]+$ ]] || [[ "${value}" == "/" ]] || [[ "${value}" == *"//"* ]]; then
+        echo "${name} must start with /, contain only URL path-safe characters, and cannot be /." >&2
+        exit 64
+    fi
+}
+
+validate_ws_path "VMESS_WSPATH" "${VMESS_WSPATH}"
+validate_ws_path "VLESS_WSPATH" "${VLESS_WSPATH}"
+
+if [[ "${VMESS_WSPATH}" == "${VLESS_WSPATH}" ]]; then
+    echo "VMESS_WSPATH and VLESS_WSPATH must be different." >&2
+    exit 64
+fi
+
+export UUID VMESS_WSPATH VLESS_WSPATH
+umask 077
+envsubst '${UUID} ${VMESS_WSPATH} ${VLESS_WSPATH}' < "${CONFIG_TEMPLATE}" > "${CONFIG_FILE}"
+envsubst '${VMESS_WSPATH} ${VLESS_WSPATH}' < "${NGINX_TEMPLATE}" > "${NGINX_CONFIG}"
+
+/app/v2ray test -c "${CONFIG_FILE}"
+nginx -t -c "${NGINX_CONFIG}"
+
+v2ray_pid=""
+nginx_pid=""
+
+shutdown() {
+    trap - EXIT INT TERM
+
+    if [[ -n "${nginx_pid}" ]]; then
+        kill -QUIT "${nginx_pid}" 2>/dev/null || true
+    fi
+    if [[ -n "${v2ray_pid}" ]]; then
+        kill -TERM "${v2ray_pid}" 2>/dev/null || true
+    fi
+
+    wait "${nginx_pid}" "${v2ray_pid}" 2>/dev/null || true
+}
+
+trap shutdown EXIT INT TERM
+
+/app/v2ray run -c "${CONFIG_FILE}" &
+v2ray_pid="$!"
+nginx -c "${NGINX_CONFIG}" -g 'daemon off;' &
+nginx_pid="$!"
+
+set +e
+wait -n "${v2ray_pid}" "${nginx_pid}"
+status="$?"
+set -e
+
+shutdown
+exit "${status}"
+

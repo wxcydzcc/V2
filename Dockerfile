@@ -1,46 +1,39 @@
+# syntax=docker/dockerfile:1
+
 FROM nginx:stable-bookworm
 
-EXPOSE 80
+ARG TARGETARCH
+ARG V2RAY_VERSION=v5.52.0
+ARG V2RAY_AMD64_SHA256=98b123c0f3ba1138eedc2be9b25935e5289236cb6800d1e6370a08d86e797177
+ARG V2RAY_ARM64_SHA256=bd87731c32d429eb6986f2a7484b4a78bfc1be4a4de1e25901265c52aa854970
+
 WORKDIR /app
-USER root
-
-ARG V2RAY_VERSION=v5.49.0
-
-COPY nginx.conf /etc/nginx/nginx.conf
-COPY entrypoint.sh ./
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends wget unzip ca-certificates iproute2 \
-    && wget -O temp.zip "https://github.com/v2fly/v2ray-core/releases/download/${V2RAY_VERSION}/v2ray-linux-64.zip" \
-    && unzip temp.zip v2ray geoip.dat geosite.dat \
-    && mv v2ray v \
-    && rm -f temp.zip \
-    && chmod 755 v entrypoint.sh \
-    && apt-get purge -y --auto-remove wget unzip \
+    && apt-get install -y --no-install-recommends ca-certificates curl gettext-base unzip \
+    && case "${TARGETARCH}" in \
+        amd64) V2RAY_ASSET="v2ray-linux-64.zip"; V2RAY_SHA256="${V2RAY_AMD64_SHA256}" ;; \
+        arm64) V2RAY_ASSET="v2ray-linux-arm64-v8a.zip"; V2RAY_SHA256="${V2RAY_ARM64_SHA256}" ;; \
+        *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl --fail --location --retry 3 --output /tmp/v2ray.zip \
+        "https://github.com/v2fly/v2ray-core/releases/download/${V2RAY_VERSION}/${V2RAY_ASSET}" \
+    && echo "${V2RAY_SHA256}  /tmp/v2ray.zip" | sha256sum --check --strict - \
+    && unzip /tmp/v2ray.zip v2ray geoip.dat geosite.dat -d /app \
+    && chmod 0755 /app/v2ray \
+    && rm -f /tmp/v2ray.zip \
+    && apt-get purge -y --auto-remove unzip \
     && rm -rf /var/lib/apt/lists/* \
-    && echo 'ewogICAgImxvZyI6ewogICAgICAgICJsb2dsZXZlbCI6Indhcm5pbmciLAogICAgICAgICJhY2Nl\
-c3MiOiIvZGV2L251bGwiLAogICAgICAgICJlcnJvciI6Ii9kZXYvbnVsbCIKICAgIH0sCiAgICAi\
-aW5ib3VuZHMiOlsKICAgICAgICB7CiAgICAgICAgICAgICJwb3J0IjoxMDAwMCwKICAgICAgICAg\
-ICAgInByb3RvY29sIjoidm1lc3MiLAogICAgICAgICAgICAibGlzdGVuIjoiMTI3LjAuMC4xIiwK\
-ICAgICAgICAgICAgInNldHRpbmdzIjp7CiAgICAgICAgICAgICAgICAiY2xpZW50cyI6WwogICAg\
-ICAgICAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgICAgICAgICAgImlkIjoiVVVJRCIsCiAg\
-ICAgICAgICAgICAgICAgICAgICAgICJhbHRlcklkIjowCiAgICAgICAgICAgICAgICAgICAgfQog\
-ICAgICAgICAgICAgICAgXQogICAgICAgICAgICB9LAogICAgICAgICAgICAic3RyZWFtU2V0dGlu\
-Z3MiOnsKICAgICAgICAgICAgICAgICJuZXR3b3JrIjoid3MiLAogICAgICAgICAgICAgICAgIndz\
-U2V0dGluZ3MiOnsKICAgICAgICAgICAgICAgICAgICAicGF0aCI6IlZNRVNTX1dTUEFUSCIKICAg\
-ICAgICAgICAgICAgIH0KICAgICAgICAgICAgfQogICAgICAgIH0sCiAgICAgICAgewogICAgICAg\
-ICAgICAicG9ydCI6MjAwMDAsCiAgICAgICAgICAgICJwcm90b2NvbCI6InZsZXNzIiwKICAgICAg\
-ICAgICAgImxpc3RlbiI6IjEyNy4wLjAuMSIsCiAgICAgICAgICAgICJzZXR0aW5ncyI6ewogICAg\
-ICAgICAgICAgICAgImNsaWVudHMiOlsKICAgICAgICAgICAgICAgICAgICB7CiAgICAgICAgICAg\
-ICAgICAgICAgICAgICJpZCI6IlVVSUQiCiAgICAgICAgICAgICAgICAgICAgfQogICAgICAgICAg\
-ICAgICAgXSwKICAgICAgICAgICAgICAgICJkZWNyeXB0aW9uIjoibm9uZSIKICAgICAgICAgICAg\
-fSwKICAgICAgICAgICAgInN0cmVhbVNldHRpbmdzIjp7CiAgICAgICAgICAgICAgICAibmV0d29y\
-ayI6IndzIiwKICAgICAgICAgICAgICAgICJ3c1NldHRpbmdzIjp7CiAgICAgICAgICAgICAgICAg\
-ICAgInBhdGgiOiJWTEVTU19XU1BBVEgiCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0K\
-ICAgICAgICB9CiAgICBdLAogICAgIm91dGJvdW5kcyI6WwogICAgICAgIHsKICAgICAgICAgICAg\
-InByb3RvY29sIjoiZnJlZWRvbSIsCiAgICAgICAgICAgICJzZXR0aW5ncyI6ewoKICAgICAgICAg\
-ICAgfQogICAgICAgIH0KICAgIF0sCiAgICAiZG5zIjp7CiAgICAgICAgInNlcnZlcnMiOlsKICAg\
-ICAgICAgICAgIjguOC44LjgiLAogICAgICAgICAgICAiOC44LjQuNCIsCiAgICAgICAgICAgICJs\
-b2NhbGhvc3QiCiAgICAgICAgXQogICAgfQp9Cg==' > config
+    && chown -R nginx:nginx /app /var/cache/nginx
 
-ENTRYPOINT [ "./entrypoint.sh" ]
+COPY --chown=nginx:nginx config.template.json nginx.conf entrypoint.sh /app/
+
+RUN chmod 0755 /app/entrypoint.sh
+
+USER nginx
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/healthz"]
+
+ENTRYPOINT ["/app/entrypoint.sh"]

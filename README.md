@@ -49,7 +49,7 @@ docker run --rm -p 8080:8080 \
 
 GitHub Actions 会在 Pull Request、`main` 分支推送和每周定时任务中执行 ShellCheck、镜像构建、配置校验及容器健康检查。
 
-手动运行工作流或推送到 `main` 时，如果配置了以下仓库 Secrets，还会发布 `amd64`/`arm64` 镜像到 Docker Hub：
+手动运行工作流或推送到 `main` 时，如果配置了以下仓库 Secrets，还会发布 `amd64`/`arm64` 镜像到 Docker Hub；没有配置时会正常跳过发布，不影响构建检查：
 
 - `DOCKER_USERNAME`
 - `DOCKER_PASSWORD`：建议使用 Docker Hub access token

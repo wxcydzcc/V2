@@ -37,4 +37,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:8080/healthz"]
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-

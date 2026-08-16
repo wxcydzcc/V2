@@ -36,8 +36,8 @@ fi
 
 export UUID VMESS_WSPATH VLESS_WSPATH
 umask 077
-envsubst '${UUID} ${VMESS_WSPATH} ${VLESS_WSPATH}' < "${CONFIG_TEMPLATE}" > "${CONFIG_FILE}"
-envsubst '${VMESS_WSPATH} ${VLESS_WSPATH}' < "${NGINX_TEMPLATE}" > "${NGINX_CONFIG}"
+envsubst "\${UUID} \${VMESS_WSPATH} \${VLESS_WSPATH}" < "${CONFIG_TEMPLATE}" > "${CONFIG_FILE}"
+envsubst "\${VMESS_WSPATH} \${VLESS_WSPATH}" < "${NGINX_TEMPLATE}" > "${NGINX_CONFIG}"
 
 /app/v2ray test -c "${CONFIG_FILE}"
 nginx -t -c "${NGINX_CONFIG}"
@@ -72,4 +72,3 @@ set -e
 
 shutdown
 exit "${status}"
-
